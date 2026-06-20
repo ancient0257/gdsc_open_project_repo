@@ -2,68 +2,68 @@
 
 **🌍 Live Demo:** [https://gdsc-open-project-repo.onrender.com/](https://gdsc-open-project-repo.onrender.com/)
 
-A full-stack developer tool that parses local Git repositories and produces an interactive, AI-powered visual map of your codebase.
+A full-stack developer tool that takes any **public GitHub repository URL**, automatically clones it, and produces an interactive, AI-powered visual map of the codebase — showing file dependencies, code complexity, and language distribution on a beautiful draggable canvas.
+
+---
+
+## How to Use
+
+1. Open the [live demo](https://gdsc-open-project-repo.onrender.com/)
+2. Paste a public GitHub URL into the top bar (e.g. `https://github.com/facebook/react`)
+3. Click **Analyse →**
+4. Click any node on the canvas to see an AI-generated explanation of that file
+
+> Leave the URL blank and click Analyse to see the app analyze its own source code as a live demo.
 
 ---
 
 ## Architecture
 
 ```
-repo-analyzer/
-├── backend/           # Python + FastAPI
-│   ├── main.py        # REST API + analysis engine
-│   ├── requirements.txt
-│   └── start_backend.sh
-└── frontend/          # React + React Flow
-    ├── src/
-    │   ├── App.jsx
-    │   ├── App.css
-    │   ├── main.jsx
-    │   ├── components/
-    │   │   ├── FileNode.jsx / .css   # Custom draggable nodes
-    │   │   ├── SidePanel.jsx / .css  # File details + AI summary
-    │   │   ├── StatsPanel.jsx / .css # Left sidebar stats
-    │   │   └── TopBar.jsx / .css     # Path input + controls
-    │   └── utils/
-    │       ├── buildFlowData.js      # API response → React Flow format
-    │       └── layout.js             # Hierarchical node layout
-    ├── index.html
-    ├── vite.config.js
-    ├── package.json
-    └── start_frontend.sh
+repo/
+├── backend/                   # Python + FastAPI
+│   ├── main.py                # REST API + analysis engine + GitHub cloning
+│   └── requirements.txt
+├── frontend/                  # React + Vite
+│   ├── src/
+│   │   ├── App.jsx            # Main application logic
+│   │   ├── App.css
+│   │   ├── main.jsx
+│   │   ├── components/
+│   │   │   ├── FileNode.jsx/css    # Custom draggable nodes
+│   │   │   ├── SidePanel.jsx/css   # File details + AI summary
+│   │   │   ├── StatsPanel.jsx/css  # Left sidebar stats
+│   │   │   └── TopBar.jsx/css      # URL input + controls
+│   │   └── utils/
+│   │       ├── buildFlowData.js    # API response → React Flow format
+│   │       └── layout.js           # Hierarchical node layout (dagre)
+│   ├── index.html
+│   ├── vite.config.js
+│   └── package.json
+├── Dockerfile                 # Multi-stage Docker build
+└── docker-compose.yml         # One-command local run
 ```
 
 ---
 
-## Quick Start
-
-### 1. Start the Backend
+## Quick Start (Docker)
 
 ```bash
-cd backend
-chmod +x start_backend.sh
-./start_backend.sh
+# Clone this repo
+git clone https://github.com/ancient0257/gdsc_open_project_repo.git
+cd gdsc_open_project_repo
+
+# Set your Gemini API key (optional — needed for AI summaries)
+# On Windows:
+set GEMINI_API_KEY=your_key_here
+# On Linux/Mac:
+export GEMINI_API_KEY=your_key_here
+
+# Run the whole app with a single command
+docker-compose up --build
 ```
 
-The API will be live at **http://localhost:8000**  
-Interactive docs: **http://localhost:8000/docs**
-
-### 2. Start the Frontend
-
-```bash
-cd frontend
-chmod +x start_frontend.sh
-./start_frontend.sh
-```
-
-The app will be live at **http://localhost:5173**
-
-### 3. Analyse a Repository
-
-1. Open http://localhost:5173
-2. Enter an absolute path in the top bar (e.g. `/home/user/my-project`)
-3. Click **Analyse →**
-4. Click any node to see details + AI summary
+Then open **http://localhost:8000** in your browser.
 
 ---
 
@@ -73,44 +73,45 @@ The app will be live at **http://localhost:5173**
 
 | Feature | Detail |
 |---------|--------|
+| GitHub URL Analysis | Clones any public GitHub repo via `git clone --depth=1`, analyses it, and auto-deletes the temp folder |
 | Multi-language parsing | Python, JS/TS, Java, C/C++, Go, Rust, Ruby, PHP, C#, Kotlin, Swift, Bash, R |
 | Dependency extraction | Regex-based import/require/include detection |
 | Lines of Code (LoC) | Total, blank, comment, net LoC per file |
-| Cyclomatic Complexity | **Exact** for Python via `ast` traversal; regex-keyword approximation for every other language |
-| Large-repo safety cap | Caps traversal at 3,000 files (`MAX_FILES`); flags `truncated` in the response so the UI can warn |
-| AI Summaries | Anthropic Claude via `/api/ai-summary` |
-| Response caching | Content-hash keyed in-memory cache |
+| Cyclomatic Complexity | Exact for Python via `ast`; keyword heuristic for all other languages |
+| Large-repo safety cap | Caps traversal at 3,000 files; flags `truncated` in the response |
+| AI Summaries | Google Gemini 1.5 Flash via `/api/ai-summary` |
+| Response caching | Content-hash keyed in-memory cache — no repeat API calls for unchanged files |
 | Markdown export | `/api/export-markdown` — shareable report with language/complexity tables |
-| REST API | FastAPI with auto-generated OpenAPI docs |
+| Static file serving | FastAPI serves the compiled React frontend — single unified service |
 
 ### Frontend (React + React Flow)
 
 | Feature | Detail |
 |---------|--------|
 | Draggable canvas | React Flow infinite canvas with zoom/pan |
-| Custom nodes | Per-language icon badge + colour theme, LoC/CC/deps metrics, complexity bar with letter grade |
-| Hierarchical layout | Topological sort assigns dependency layers |
+| Custom nodes | Per-language icon badge + colour theme, LoC/CC/deps metrics, complexity bar |
+| Hierarchical layout | Topological sort using `dagre` assigns dependency layers |
 | Minimap | Overview of full graph, pannable and zoomable |
-| File search | Live search by filename or path — dims non-matches, highlights matches in amber |
-| Language filter | Click a language in the sidebar, or use the dropdown |
-| Complexity filter | Click a complexity row in the sidebar, or use the dropdown |
-| Clickable dependencies | Click a dependency chip in the side panel to jump straight to that file |
-| Clickable "most complex" | Click any entry in the sidebar's top-5 list to focus that node |
-| Fit view | Button or `F` key — recenters and rescales to fit all visible nodes |
-| Keyboard shortcuts | `/` focus search, `Esc` clear search or close panel, `F` fit view |
-| Export report | Downloads a markdown report of the current analysis |
-| Stats panel | File count, LoC totals, complexity distribution, top-5 most complex |
-| Side panel | Full metrics + dependency list + AI summary with copy-to-clipboard |
-| AI caching indicator | "cached" badge when summary reused |
-| Truncation warning | Amber banner when a repo exceeds the file cap |
+| File search | Live search by filename — dims non-matches, highlights matches |
+| Language filter | Filter graph by programming language |
+| Complexity filter | Filter graph by cyclomatic complexity level |
+| Clickable dependencies | Click a dependency chip in the side panel to jump to that file |
+| Fit view | Button or `F` key |
+| Keyboard shortcuts | `/` focus search, `Esc` clear/close, `F` fit view |
+| Export report | Downloads a markdown analysis report |
+| AI summary panel | Click any node for an instant AI-powered plain-English file explanation |
 
 ---
 
 ## API Reference
 
-### `GET /api/analyse?repo_path=<path>`
+### `GET /api/analyse?github_url=<url>`
 
-Traverses a directory and returns the full graph.
+Clones a public GitHub repository and returns the full dependency graph.
+
+```
+GET /api/analyse?github_url=https://github.com/username/repo
+```
 
 **Response:**
 ```json
@@ -122,11 +123,7 @@ Traverses a directory and returns the full graph.
       "relative_path": "src/main.py",
       "language": "python",
       "lines_of_code": 142,
-      "blank_lines": 18,
-      "comment_lines": 24,
       "cyclomatic_complexity": 11,
-      "size_bytes": 4821,
-      "content_hash": "a1b2c3d4e5f6a7b8",
       "dependencies": ["utils", "models"]
     }
   ],
@@ -138,64 +135,41 @@ Traverses a directory and returns the full graph.
     "total_edges": 63,
     "total_loc": 8420,
     "language_distribution": { "python": 31, "javascript": 16 },
-    "complexity_distribution": { "low": 35, "medium": 10, "high": 2 },
-    "avg_loc": 179.1,
-    "most_complex": [...]
+    "complexity_distribution": { "low": 35, "medium": 10, "high": 2 }
   }
 }
 ```
 
 ### `POST /api/ai-summary`
 
-Request Claude to explain a file.
+Generate a Gemini AI explanation for a specific file.
 
 **Body:**
 ```json
 {
   "file_path": "/absolute/path/to/file.py",
-  "repo_root": "/absolute/path/to/repo"
+  "repo_root": "",
+  "api_key": "optional_gemini_key"
 }
 ```
 
-**Response:**
-```json
-{
-  "summary": "This file defines the main FastAPI application...",
-  "cached": false
-}
-```
+### `GET /api/export-markdown?github_url=<url>`
 
-### `GET /api/file-content?file_path=<path>`
+Returns a shareable markdown report of the repository analysis.
 
-Returns raw file content (UTF-8, Latin-1, or CP1252 fallback).
+### `GET /api/health`
 
-### `GET /api/export-markdown?repo_path=<path>`
-
-Returns a shareable markdown report — overview stats, language distribution table, complexity distribution table, and the top-5 most complex files. The frontend's **Export** button downloads this directly as a `.md` file.
-
-**Response:**
-```json
-{ "markdown": "# Repository analysis: my-project\n\n- **Files analysed:** 47\n..." }
-```
+Returns server health and AI summary cache size.
 
 ---
 
 ## Configuration
 
-### Environment Variables (frontend)
+### Environment Variables
 
-Create `frontend/.env.local`:
-```
-VITE_API_URL=http://localhost:8000
-```
-
-### Skipped Directories
-
-The backend automatically skips: `.git`, `node_modules`, `__pycache__`, `.venv`, `dist`, `build`, `.next`, `target`, and other build artifact directories.
-
-### Supported Languages
-
-`.py` `.js` `.ts` `.jsx` `.tsx` `.java` `.cpp` `.c` `.h` `.hpp` `.go` `.rs` `.rb` `.php` `.cs` `.swift` `.kt` `.scala` `.r` `.m` `.lua` `.sh` `.bash`
+| Variable | Description |
+|----------|-------------|
+| `GEMINI_API_KEY` | Google Gemini API key for AI summaries (optional — can also be passed per-request) |
 
 ---
 
@@ -203,39 +177,30 @@ The backend automatically skips: `.git`, `node_modules`, `__pycache__`, `.venv`,
 
 | Level | CC Score | Node colour |
 |-------|----------|-------------|
-| Low   | < 10     | Green       |
-| Medium| 10 – 24  | Amber       |
-| High  | 25+      | Red         |
+| Low   | < 10     | 🟢 Green    |
+| Medium| 10 – 24  | 🟡 Amber    |
+| High  | 25+      | 🔴 Red      |
 
-For Python files, cyclomatic complexity is computed exactly via `ast` traversal — counting `if`/`for`/`while`/`except`/`with` nodes, boolean operator branches, comprehensions, lambdas, and `match` cases. Every other supported language falls back to a regex keyword-counting heuristic (no execution required, but less precise than full AST parsing).
+---
 
 ## Keyboard Shortcuts
 
 | Key | Action |
 |-----|--------|
 | `/` | Focus the file search box |
-| `Esc` | Clear search, or close the side panel if search is empty |
+| `Esc` | Clear search, or close the side panel |
 | `F` | Fit the graph to the current view |
 
-## Large Repositories
+---
 
-Traversal is capped at 3,000 files (`MAX_FILES` in `main.py`). If a repository exceeds this, the response's `stats.truncated` flag is set to `true` and the frontend shows an amber warning banner. Raise `MAX_FILES` in the backend if you need to analyse larger codebases — just expect slower response times.
+## Cloud Deployment
+
+This app is packaged as a single Docker service. To deploy on **Render.com**:
+1. Connect your GitHub repository.
+2. Choose **Docker** as the environment.
+3. Add `GEMINI_API_KEY` as an environment variable.
+4. Click Deploy.
 
 ---
 
-## AI Integration Notes
-
-- Summaries are generated via the Anthropic API (`claude-sonnet-4-20250514`)
-- Each summary is cached by the SHA-256 hash of the file content
-- Files are truncated to 4000 characters before sending to the API
-- The backend needs no API key when running inside Claude.ai's infrastructure
-- For standalone deployments, pass `"api_key": "sk-ant-..."` in the AI summary request body
-
----
-
-## Performance Tips
-
-- Large repos (1000+ files) may take 10–20 seconds to analyse
-- Complexity filters help focus on high-interest files
-- The minimap helps navigate large graphs
-- Use the language filter to explore one language at a time
+_Generated by RepoLens_

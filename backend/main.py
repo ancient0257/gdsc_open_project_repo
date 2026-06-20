@@ -7,6 +7,9 @@ import ast
 import json
 import hashlib
 import logging
+import shutil
+import subprocess
+import tempfile
 from pathlib import Path
 from typing import Optional
 from dataclasses import dataclass, field, asdict
@@ -389,13 +392,53 @@ def analyse_repository(root_path: str) -> RepoGraph:
 # ── API Routes ──────────────────────────────────────────────────────────────
 
 
-@app.get("/api/analyse")
-def analyse(repo_path: Optional[str] = Query(None, description="Absolute path to the git repo. Leave blank for self-analysis demo.")):
+def clone_github_repo(github_url: str) -> str:
+    """
+    Clone a public GitHub repository to a temporary directory.
+    Returns the path to the cloned directory.
+    Raises ValueError for invalid URLs or failed clones.
+    """
+    url = github_url.strip().rstrip("/")
+    # Normalize URL: strip .git suffix if present
+    if not url.endswith(".git"):
+        url = url + ".git"
+    # Basic sanity check
+    if not (url.startswith("https://github.com/") or url.startswith("http://github.com/")):
+        raise ValueError("Only public GitHub URLs are supported (https://github.com/user/repo).")
+
+    tmp_dir = tempfile.mkdtemp(prefix="repolens_")
+    logger.info(f"Cloning {url} into {tmp_dir}")
     try:
-        # Fallback to current working directory if empty
-        if not repo_path or repo_path.strip().lower() == "demo":
+        result = subprocess.run(
+            ["git", "clone", "--depth=1", url, tmp_dir],
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        if result.returncode != 0:
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+            raise ValueError(f"Could not clone repository: {result.stderr.strip() or 'Unknown error'}")
+    except subprocess.TimeoutExpired:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+        raise ValueError("Cloning timed out. The repository may be too large.")
+    except FileNotFoundError:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+        raise ValueError("'git' command not found on server. Please ensure git is installed.")
+
+    return tmp_dir
+
+
+@app.get("/api/analyse")
+def analyse(github_url: Optional[str] = Query(None, description="Public GitHub repository URL, e.g. https://github.com/user/repo")):
+    tmp_dir = None
+    try:
+        if not github_url or github_url.strip() == "":
+            # Demo mode: analyse this app's own source
             repo_path = os.getcwd()
-            
+        else:
+            tmp_dir = clone_github_repo(github_url)
+            repo_path = tmp_dir
+
         graph = analyse_repository(repo_path)
         return JSONResponse(content={
             "nodes": graph.nodes,
@@ -407,6 +450,9 @@ def analyse(repo_path: Optional[str] = Query(None, description="Absolute path to
     except Exception as e:
         logger.exception("Analysis failed")
         raise HTTPException(status_code=500, detail=f"Analysis failed: {e}")
+    finally:
+        if tmp_dir:
+            shutil.rmtree(tmp_dir, ignore_errors=True)
 
 
 @app.get("/api/file-content")
@@ -483,19 +529,30 @@ async def ai_summary(req: AIRequest):
 
 
 @app.get("/api/export-markdown")
-def export_markdown(repo_path: str = Query(..., description="Absolute path to the git repo")):
+def export_markdown(github_url: Optional[str] = Query(None, description="Public GitHub repository URL")):
     """
     Export the analysis as a shareable markdown report — repo overview,
     language breakdown, and the most complex files, ready to drop into
     a README or a PR description.
     """
+    tmp_dir = None
     try:
+        if not github_url or github_url.strip() == "":
+            repo_path = os.getcwd()
+            repo_name = Path(repo_path).name or "this-app"
+        else:
+            tmp_dir = clone_github_repo(github_url)
+            repo_path = tmp_dir
+            repo_name = github_url.rstrip("/").split("/")[-1].replace(".git", "")
+
         graph = analyse_repository(repo_path)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    finally:
+        if tmp_dir:
+            shutil.rmtree(tmp_dir, ignore_errors=True)
 
     stats = graph.stats
-    repo_name = Path(repo_path).name or repo_path
 
     lines = [
         f"# Repository analysis: {repo_name}",

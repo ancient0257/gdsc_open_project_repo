@@ -19,11 +19,11 @@ export default function TopBar({
       </div>
 
       <div className="tb-search">
-        <span className="tb-icon">📂</span>
+        <span className="tb-icon">🐙</span>
         <input
           type="text"
           className="tb-path-input"
-          placeholder="/absolute/path/to/repo (or leave blank to analyze this app)"
+          placeholder="https://github.com/username/repo — or leave blank to demo"
           value={repoPath}
           onChange={(e) => onRepoPathChange(e.target.value)}
           onKeyDown={(e) => {

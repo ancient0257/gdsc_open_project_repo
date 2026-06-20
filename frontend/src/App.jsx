@@ -30,7 +30,7 @@ function Workspace() {
   const [selectedNode, setSelectedNode] = useState(null);
   const [aiSummary, setAiSummary] = useState(null);
   const [aiLoading, setAiLoading] = useState(false);
-  const [repoPath, setRepoPath] = useState("");
+  const [githubUrl, setGithubUrl] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [filterLanguage, setFilterLanguage] = useState("all");
@@ -39,7 +39,7 @@ function Workspace() {
   const [rawData, setRawData] = useState(null);
   const reactFlow = useReactFlow();
 
-  const analyseRepo = useCallback(async (path) => {
+  const analyseRepo = useCallback(async (url) => {
     setLoading(true);
     setError(null);
     setSelectedNode(null);
@@ -47,9 +47,8 @@ function Workspace() {
     setSearchQuery("");
 
     try {
-      const res = await fetch(
-        `${API_BASE}/api/analyse?repo_path=${encodeURIComponent(path)}`
-      );
+      const params = url.trim() ? `?github_url=${encodeURIComponent(url)}` : "";
+      const res = await fetch(`${API_BASE}/api/analyse${params}`);
       if (!res.ok) {
         const err = await res.json();
         throw new Error(err.detail || "Analysis failed");
@@ -92,7 +91,7 @@ function Workspace() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           file_path: nodeData.path,
-          repo_root: repoPath,
+          repo_root: "",
         }),
       });
       const result = await res.json();
@@ -102,7 +101,7 @@ function Workspace() {
     } finally {
       setAiLoading(false);
     }
-  }, [repoPath]);
+  }, []);
 
   const selectAndFocusNode = useCallback((nodeId) => {
     const node = nodes.find((n) => n.id === nodeId);
@@ -135,15 +134,15 @@ function Workspace() {
   }, [reactFlow]);
 
   const handleExport = useCallback(async () => {
-    if (!repoPath.trim()) return;
     try {
-      const res = await fetch(`${API_BASE}/api/export-markdown?repo_path=${encodeURIComponent(repoPath)}`);
+      const params = githubUrl.trim() ? `?github_url=${encodeURIComponent(githubUrl)}` : "";
+      const res = await fetch(`${API_BASE}/api/export-markdown${params}`);
       if (!res.ok) throw new Error("Export failed");
       const { markdown } = await res.json();
       const blob = new Blob([markdown], { type: "text/markdown" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
-      const repoName = repoPath.split("/").filter(Boolean).pop() || "repo";
+      const repoName = githubUrl.split("/").filter(Boolean).pop() || "repo";
       a.href = url;
       a.download = `${repoName}-analysis.md`;
       document.body.appendChild(a);
@@ -153,7 +152,7 @@ function Workspace() {
     } catch (e) {
       setError("Could not export report: " + e.message);
     }
-  }, [repoPath]);
+  }, [githubUrl]);
 
   // Keyboard shortcuts: F = fit view, Esc = clear search / close panel
   useEffect(() => {
@@ -181,9 +180,9 @@ function Workspace() {
   return (
     <div className="app">
       <TopBar
-        repoPath={repoPath}
-        onRepoPathChange={setRepoPath}
-        onAnalyse={() => analyseRepo(repoPath)}
+        repoPath={githubUrl}
+        onRepoPathChange={setGithubUrl}
+        onAnalyse={() => analyseRepo(githubUrl)}
         loading={loading}
         nodeCount={nodes.length}
         edgeCount={edges.length}
@@ -229,8 +228,8 @@ function Workspace() {
             <div className="empty-state">
               <div className="empty-icon">⬡</div>
               <h2>No repository loaded</h2>
-              <p>Enter an absolute path above (or leave blank) and click <strong>Analyse</strong></p>
-              <p className="hint">Example: /home/user/my-project, or leave blank to analyze this app's own code</p>
+              <p>Paste a public GitHub URL above and click <strong>Analyse</strong></p>
+              <p className="hint">Example: https://github.com/username/repo — or leave blank to demo this app</p>
             </div>
           )}
           <ReactFlow

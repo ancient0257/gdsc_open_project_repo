@@ -1,5 +1,7 @@
 # RepoLens — Repository Analysis Engine
 
+**🌍 Live Demo:** [https://gdsc-open-project-repo.onrender.com/](https://gdsc-open-project-repo.onrender.com/)
+
 A full-stack developer tool that parses local Git repositories and produces an interactive, AI-powered visual map of your codebase.
 
 ---
